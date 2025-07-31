@@ -12,9 +12,20 @@ const PORT = process.env.PORT || 3001;
 
 app.use(express.json());
 
-// Enable CORS for React frontend
+// Enable CORS for React frontend (localhost in dev, julietteandjacob.com in prod)
 app.use(cors({
-  origin: 'http://localhost:3000', // React app origin
+  origin: (origin, callback) => {
+    const allowedOrigins = [
+      'http://localhost:3000',
+      'https://julietteandjacob.com',
+      'https://www.julietteandjacob.com',
+    ];
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
 }));
 
