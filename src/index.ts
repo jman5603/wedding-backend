@@ -1,6 +1,6 @@
-
 import express from 'express';
-import session from 'express-session';
+import { Request, Response, NextFunction } from 'express';
+import jwt from 'jsonwebtoken';
 import cors from 'cors';
 import dotenv from 'dotenv';
 
@@ -29,55 +29,55 @@ app.use(cors({
   credentials: true,
 }));
 
-declare module 'express-session' {
-  interface SessionData {
-    isAuthenticated: boolean;
-  }
-}
 
-app.use(session({
-    secret: process.env.SESSION_SECRET || 'some_secret_key',
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-      maxAge: 1000 * 60 * 60 * 24 // Expires in 24 hours
-    }
-}));
+const JWT_SECRET = process.env.JWT_SECRET || 'jwt_secret_key';
 
 const MASTER_PASSWORD = process.env.WEBSITE_PASSWORD;
 
 // --- API Endpoints ---
 
-// POST /api/login: Validate password and create a session
+
+// POST /api/login: Validate password and return JWT
 app.post('/api/login', (req, res) => {
   const { password } = req.body;
   if (password && password === MASTER_PASSWORD) {
-    req.session.isAuthenticated = true;
-    return res.status(200).json({ message: 'Login successful' });
+    const token = jwt.sign({ isAuthenticated: true }, JWT_SECRET, { expiresIn: '1d' });
+    return res.status(200).json({ message: 'Login successful', token: token });
   }
   return res.status(401).json({ message: 'Invalid password' });
 });
 
+
+// Middleware to check JWT
+
+interface AuthPayload {
+  isAuthenticated: boolean;
+  iat?: number;
+  exp?: number;
+}
+
+function authenticateToken(req: Request, res: Response, next: NextFunction) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  if (!token) return res.sendStatus(401);
+
+  jwt.verify(token, JWT_SECRET, (err: any, user: any) => {
+    if (err) return res.sendStatus(403);
+    (req as any).user = user as AuthPayload;
+    next();
+  });
+}
+
 // GET /api/status: Check if the user is authenticated
-app.get('/api/status', (req, res) => {
-  if (req.session.isAuthenticated) {
-    return res.status(200).json({ isAuthenticated: true });
-  }
-  return res.status(401).json({ isAuthenticated: false });
+app.get('/api/status', authenticateToken, (req, res) => {
+  return res.status(200).json({ isAuthenticated: true });
 });
 
-// POST /api/logout: Destroy the session
+
+// POST /api/logout: (optional, just for frontend compatibility)
 app.post('/api/logout', (req, res) => {
-  req.session.destroy(err => {
-    if (err) {
-      return res.status(500).json({ message: 'Logout failed' });
-    }
-    res.clearCookie('connect.sid');
-    return res.status(200).json({ message: 'Logout successful' });
-  });
+  // With JWT, logout is handled on the client by deleting the token
+  return res.status(200).json({ message: 'Logout successful' });
 });
 
 app.listen(PORT, () => {
