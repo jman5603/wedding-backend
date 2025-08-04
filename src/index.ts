@@ -17,6 +17,7 @@ app.use(cors({
   origin: (origin, callback) => {
     const allowedOrigins = [
       'http://localhost:3000',
+      'http://localhost:8080',
       'https://julietteandjacob.com',
       'https://www.julietteandjacob.com',
     ];
