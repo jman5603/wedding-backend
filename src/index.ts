@@ -9,6 +9,18 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Stripe setup
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+
+const calculateOrderAmount = (items: any[]) => {
+  // Calculate the order total on the server to prevent
+  // people from directly manipulating the amount on the client
+  let total = 0;
+  items.forEach((item) => {
+    total += item.amount;
+  });
+  return total;
+};
 
 app.use(express.json());
 
@@ -86,4 +98,44 @@ app.listen(PORT, () => {
   if (!MASTER_PASSWORD) {
     console.warn('Warning: MASTER_PASSWORD is not set. Please set it in your .env file.');
   }
+});
+
+// Stripe integration
+
+interface Donor {
+  type: 'anonymous' | 'named';
+  firstName?: string;
+  lastName?: string;
+}
+
+app.post("/create-payment-intent", async (req, res) => {
+  const { donor, items } = req.body;
+
+  const metadata: { [key: string]: string } = {
+      product_type: 'honeymoon_fund',
+      donor_type: donor.type, // 'anonymous' or 'named'
+    };
+
+  if (donor.type === 'named') {
+      metadata.firstName = donor.firstName;
+      metadata.lastName = donor.lastName;
+      metadata.fullName = `${donor.firstName} ${donor.lastName}`;
+    }
+
+  // Create a PaymentIntent with the order amount and currency
+  const paymentIntent = await stripe.paymentIntents.create({
+    amount: calculateOrderAmount(items),
+    currency: "usd",
+    automatic_payment_methods: {
+      enabled: true,
+    },
+    metadata: metadata,
+    description: donor.type === 'anonymous' 
+        ? 'Honeymoon Fund Contribution (Anonymous)'
+        : `Honeymoon Fund Contribution from ${donor.firstName} ${donor.lastName}`,
+  });
+
+  res.send({
+    clientSecret: paymentIntent.client_secret,
+  });
 });
