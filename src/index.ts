@@ -3,11 +3,26 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import pg from 'pg';
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+const dbConfig = {
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
+  host: process.env.NODE_ENV === 'production' 
+    ? '/cloudsql/' + process.env.DB_INSTANCE_CONNECTION_NAME 
+    : process.env.DB_HOST || 'localhost',
+  port: process.env.NODE_ENV === 'production' 
+    ? undefined 
+    : parseInt(process.env.DB_PORT || '5432'),
+};
+
+const pool = new pg.Pool(dbConfig);
 
 // Stripe setup
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
@@ -138,4 +153,17 @@ app.post("/create-payment-intent", async (req, res) => {
   res.send({
     clientSecret: paymentIntent.client_secret,
   });
+});
+
+// Database calls
+app.get('/api/items', async (req, res) => {
+  try {
+    const client = await pool.connect();
+    const result = await client.query('SELECT * FROM items');
+    res.json(result.rows);
+    client.release();
+  } catch (err) {
+    console.error('Error fetching items:', err);
+    res.status(500).send('Internal Server Error');
+  }
 });
