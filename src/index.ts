@@ -167,3 +167,26 @@ app.get('/api/items', async (req, res) => {
     res.status(500).send('Internal Server Error');
   }
 });
+
+// Add 1 to amount purchased for item with given id
+app.post('/api/purchase', async (req, res) => {
+  const { itemId } = req.body;
+  if (!itemId) {
+    return res.status(400).json({ message: 'itemId is required' });
+  }
+
+  try {
+    const client = await pool.connect();
+    const result = await client.query('UPDATE items SET amount_purchased = amount_purchased + 1 WHERE id = $1 RETURNING *', [itemId]);
+    client.release();
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: 'Item not found' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Error updating item:', err);
+    res.status(500).send('Internal Server Error');
+  }
+});
