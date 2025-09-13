@@ -62,19 +62,11 @@ const JWT_SECRET = process.env.JWT_SECRET || 'jwt_secret_key';
 
 const MASTER_PASSWORD = process.env.WEBSITE_PASSWORD;
 
-// --- API Endpoints ---
-
-
-// POST /api/login: Validate password and return JWT
-app.post('/api/login', (req, res) => {
-  const { password } = req.body;
-  if (password && password === MASTER_PASSWORD) {
-    const token = jwt.sign({ isAuthenticated: true }, JWT_SECRET, { expiresIn: '1d' });
-    return res.status(200).json({ message: 'Login successful', token: token });
-  }
-  return res.status(401).json({ message: 'Invalid password' });
-});
-
+interface Donor {
+  type: 'anonymous' | 'named';
+  firstName?: string;
+  lastName?: string;
+}
 
 // Middleware to check JWT
 
@@ -96,6 +88,19 @@ function authenticateToken(req: Request, res: Response, next: NextFunction) {
   });
 }
 
+// --- API Endpoints ---
+
+
+// POST /api/login: Validate password and return JWT
+app.post('/api/login', (req, res) => {
+  const { password } = req.body;
+  if (password && password === MASTER_PASSWORD) {
+    const token = jwt.sign({ isAuthenticated: true }, JWT_SECRET, { expiresIn: '1d' });
+    return res.status(200).json({ message: 'Login successful', token: token });
+  }
+  return res.status(401).json({ message: 'Invalid password' });
+});
+
 // GET /api/status: Check if the user is authenticated
 app.get('/api/status', authenticateToken, (req, res) => {
   return res.status(200).json({ isAuthenticated: true });
@@ -116,12 +121,6 @@ app.listen(PORT, () => {
 });
 
 // Stripe integration
-
-interface Donor {
-  type: 'anonymous' | 'named';
-  firstName?: string;
-  lastName?: string;
-}
 
 app.post("/create-payment-intent", async (req, res) => {
   const { donor, items } = req.body;
@@ -190,3 +189,24 @@ app.post('/api/purchase', async (req, res) => {
     res.status(500).send('Internal Server Error');
   }
 });
+
+app.post('/api/rsvp', async (req, res) => {
+  const { name } = req.body;
+  if (!name) {
+    return res.status(400).json({ message: 'characters to search are required' });
+  }
+  try {
+    const client = await pool.connect();
+    const result = await client.query("SELECT * FROM guests WHERE first_name ILIKE '%' || $1 || '%' OR last_name ILIKE '%' || $1 || '%'", [`%${name}%`]);
+    client.release();
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: 'No guests found' });
+    }
+    
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error retrieving rsvp results: ', err);
+    res.status(500).send('Internal Server Error');
+  }
+})
