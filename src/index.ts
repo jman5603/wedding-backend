@@ -210,3 +210,24 @@ app.post('/api/rsvp', async (req, res) => {
     res.status(500).send('Internal Server Error');
   }
 })
+
+app.post('/api/party', async (req, res) => {
+  const { partyId } = req.body;
+  if (!partyId) {
+    return res.status(400).json({ message: 'partyId is required' });
+  }
+  try {
+    const client = await pool.connect();
+    const result = await client.query('SELECT * FROM guests WHERE party_id = $1', [partyId]);
+    client.release();
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: 'No guests found for this party' });
+    }
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error retrieving party guests: ', err);
+    res.status(500).send('Internal Server Error');
+  }
+});
