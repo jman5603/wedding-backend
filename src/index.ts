@@ -209,7 +209,47 @@ app.post('/api/rsvp', async (req, res) => {
     console.error('Error retrieving rsvp results: ', err);
     res.status(500).send('Internal Server Error');
   }
-})
+});
+
+app.post('/api/submit-rsvp', async (req, res) => {
+  const { guests } = req.body;
+  if (!Array.isArray(guests) || guests.length === 0) {
+    return res.status(400).json({ message: 'guests array is required' });
+  }
+
+  try {
+    const client = await pool.connect();
+    const results = [];
+
+    for (const guest of guests) {
+      const { guestId, attending, mealChoice, dietaryRestrictions, songRequest, additionalGuests } = guest;
+      if (!guestId || attending === undefined) {
+        results.push({ guestId, success: false, message: 'guestId and attending are required' });
+        continue;
+      }
+
+      const result = await client.query(
+        `UPDATE guests 
+         SET attending = $1, meal_choice = $2, dietary_restrictions = $3, song_request = $4, additional_guests = $5, rsvp_submitted = TRUE 
+         WHERE id = $6 
+         RETURNING *`,
+        [attending, mealChoice, dietaryRestrictions, songRequest, additionalGuests, guestId]
+      );
+
+      if (result.rowCount === 0) {
+        results.push({ guestId, success: false, message: 'Guest not found' });
+      } else {
+        results.push({ guestId, success: true, guest: result.rows[0] });
+      }
+    }
+
+    client.release();
+    res.json({ message: 'RSVPs processed', results });
+  } catch (err) {
+    console.error('Error submitting RSVPs: ', err);
+    res.status(500).send('Internal Server Error');
+  }
+});
 
 app.post('/api/party', async (req, res) => {
   const { partyId } = req.body;
