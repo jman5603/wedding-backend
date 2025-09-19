@@ -170,13 +170,14 @@ app.get('/api/items', async (req, res) => {
 // Add 1 to amount purchased for item with given id
 app.post('/api/purchase', async (req, res) => {
   const { itemId } = req.body;
-  if (!itemId) {
-    return res.status(400).json({ message: 'itemId is required' });
+  const id = Number(itemId);
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ message: 'itemId must be an integer' });
   }
 
   try {
     const client = await pool.connect();
-    const result = await client.query('UPDATE items SET amount_purchased = amount_purchased + 1 WHERE id = $1 RETURNING *', [itemId]);
+    const result = await client.query('UPDATE items SET amount_purchased = amount_purchased + 1 WHERE id = $1 RETURNING *', [id]);
     client.release();
 
     if (result.rowCount === 0) {
@@ -191,19 +192,29 @@ app.post('/api/purchase', async (req, res) => {
 });
 
 app.post('/api/rsvp', async (req, res) => {
-  const { name } = req.body;
-  if (!name) {
+  let { name } = req.body;
+  if (!name || typeof name !== 'string') {
     return res.status(400).json({ message: 'characters to search are required' });
   }
+
+  // Basic sanitization: trim, limit length, and remove unexpected characters
+  name = name.trim().slice(0, 100);
+  // Allow letters, numbers, spaces, hyphens, apostrophes
+  const safeName = name.replace(/[^\p{L}\p{N}\s\-']/gu, '');
+  const param = `%${safeName}%`;
+
   try {
     const client = await pool.connect();
-    const result = await client.query("SELECT * FROM guests WHERE first_name ILIKE '%' || $1 || '%' OR last_name ILIKE '%' || $1 || '%'", [`%${name}%`]);
+    const result = await client.query(
+      "SELECT * FROM guests WHERE first_name ILIKE $1 OR last_name ILIKE $1",
+      [param]
+    );
     client.release();
 
     if (result.rowCount === 0) {
       return res.status(404).json({ message: 'No guests found' });
     }
-    
+
     res.json(result.rows);
   } catch (err) {
     console.error('Error retrieving rsvp results: ', err);
@@ -222,9 +233,15 @@ app.post('/api/submit-rsvp', async (req, res) => {
     const results = [];
 
     for (const guest of guests) {
-      const { guestId, attending, mealChoice, dietaryRestrictions, songRequest, additionalGuests } = guest;
-      if (!guestId || attending === undefined) {
-        results.push({ guestId, success: false, message: 'guestId and attending are required' });
+      const guestId = Number(guest.guestId);
+      const attending = guest.attending;
+      const mealChoice = typeof guest.mealChoice === 'string' ? guest.mealChoice.slice(0, 100) : null;
+      const dietaryRestrictions = typeof guest.dietaryRestrictions === 'string' ? guest.dietaryRestrictions.slice(0, 255) : null;
+      const songRequest = typeof guest.songRequest === 'string' ? guest.songRequest.slice(0, 255) : null;
+      const additionalGuests = Number(guest.additionalGuests) || 0;
+
+      if (!Number.isInteger(guestId) || attending === undefined) {
+        results.push({ guestId: guest.guestId, success: false, message: 'guestId (int) and attending are required' });
         continue;
       }
 
@@ -252,9 +269,9 @@ app.post('/api/submit-rsvp', async (req, res) => {
 });
 
 app.post('/api/party', async (req, res) => {
-  const { partyId } = req.body;
-  if (!partyId) {
-    return res.status(400).json({ message: 'partyId is required' });
+  const partyId = Number(req.body.partyId);
+  if (!Number.isInteger(partyId)) {
+    return res.status(400).json({ message: 'partyId must be an integer' });
   }
   try {
     const client = await pool.connect();
