@@ -237,12 +237,11 @@ app.post('/api/submit-rsvp', async (req, res) => {
 
     for (let i = 0; i < guests.length; i++) {
       const guest = guests[i];
-      const guestId = Number(guest.guestId);
-      const attending = guest.attending;
-      const mealChoice = typeof guest.mealChoice === 'string' ? guest.mealChoice.slice(0, 100) : null;
-      const dietaryRestrictions = typeof guest.dietaryRestrictions === 'string' ? guest.dietaryRestrictions.slice(0, 255) : null;
-      const songRequest = typeof guest.songRequest === 'string' ? guest.songRequest.slice(0, 255) : null;
-      const additionalGuests = Number(guest.additionalGuests) || 0;
+      const guestId = Number(guest.id);
+      const attending = guest.is_attending;
+      const email = typeof guest.email === 'string' ? guest.email.slice(0, 255) : null;
+      const mealChoice = typeof guest.meal_choice === 'string' ? guest.meal_choice.slice(0, 100) : null;
+      const dietaryRestrictions = typeof guest.dietary_restrictions === 'string' ? guest.dietary_restrictions.slice(0, 255) : null;
 
       if (!Number.isInteger(guestId) || attending === undefined) {
         results.push({ guestId: guest.guestId, success: false, message: 'guestId (int) and attending are required' });
@@ -250,11 +249,11 @@ app.post('/api/submit-rsvp', async (req, res) => {
       }
 
       const result = await client.query(
-        `UPDATE guests 
-         SET attending = $1, meal_choice = $2, dietary_restrictions = $3, song_request = $4, additional_guests = $5, rsvp_submitted = TRUE 
-         WHERE id = $6 
+        `UPDATE guests
+         SET is_attending = $1, email = $2, meal_choice = $3, dietary_restrictions = $4, rsvp_submitted = TRUE
+         WHERE id = $5
          RETURNING *`,
-        [attending, mealChoice, dietaryRestrictions, songRequest, additionalGuests, guestId]
+        [attending, email, mealChoice, dietaryRestrictions, guestId]
       );
 
       if (result.rowCount === 0) {
