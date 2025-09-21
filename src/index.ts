@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import pg from 'pg';
+import { sendRsvpConfirmation, sendEmail } from './email';
 
 dotenv.config();
 
@@ -230,9 +231,12 @@ app.post('/api/submit-rsvp', async (req, res) => {
 
   try {
     const client = await pool.connect();
-    const results = [];
+    const results: any[] = [];
+    const updatedGuests: any[] = [];
+    let primaryGuest: { email?: string; name?: string } | null = null;
 
-    for (const guest of guests) {
+    for (let i = 0; i < guests.length; i++) {
+      const guest = guests[i];
       const guestId = Number(guest.guestId);
       const attending = guest.attending;
       const mealChoice = typeof guest.mealChoice === 'string' ? guest.mealChoice.slice(0, 100) : null;
@@ -256,12 +260,84 @@ app.post('/api/submit-rsvp', async (req, res) => {
       if (result.rowCount === 0) {
         results.push({ guestId, success: false, message: 'Guest not found' });
       } else {
-        results.push({ guestId, success: true, guest: result.rows[0] });
+        const updatedGuest = result.rows[0];
+        updatedGuests.push(updatedGuest);
+        results.push({ guestId, success: true, guest: updatedGuest });
+
+        // Detect primary guest flags but do not send email here; choose recipient after processing all guests
+        const isPrimaryFlag = guest.isPrimary === true || guest.primary === true || guest.is_primary === true;
+        if (!primaryGuest && isPrimaryFlag && updatedGuest.email) {
+          primaryGuest = { email: updatedGuest.email, name: updatedGuest.first_name || updatedGuest.firstName || '' };
+        }
+      }
+    }
+
+    // Fallback: if no primary flagged, use first updated guest with an email
+    if (!primaryGuest && updatedGuests.length > 0) {
+      const firstWithEmail = updatedGuests.find(g => g.email);
+      if (firstWithEmail) {
+        primaryGuest = { email: firstWithEmail.email, name: firstWithEmail.first_name || firstWithEmail.firstName || '' };
+      }
+    }
+
+    // Attempt to send one confirmation email summarizing all guests for the party
+    let emailResult: any = { emailSent: false };
+    if (primaryGuest && primaryGuest.email) {
+      try {
+        const to = primaryGuest.email;
+        const subject = 'Your RSVP confirmation';
+
+        // Build a detailed text summary for each guest
+        const detailedLines = updatedGuests.map(g => {
+          const fullName = `${(g.first_name || g.firstName || '').toString()} ${(g.last_name || g.lastName || '').toString()}`.trim() || 'Unnamed Guest';
+          const emailAddr = g.email || 'N/A';
+          const attending = g.attending ? 'Yes' : 'No';
+          const meal = (g.meal_choice || g.mealChoice) || 'N/A';
+          const dietary = (g.dietary_restrictions || g.dietaryRestrictions) || 'None';
+          const song = (g.song_request || g.songRequest) || 'None';
+          const additional = (g.additional_guests ?? g.additionalGuests ?? 0) || 0;
+
+          return `Name: ${fullName}\nEmail: ${emailAddr}\nAttending: ${attending}\nMeal choice: ${meal}\nDietary restrictions: ${dietary}\nSong request: ${song}\nAdditional guests: ${additional}`;
+        });
+
+        const text = `Hi ${primaryGuest.name || ''},\n\nThanks for RSVPing. Below are the selections for each guest in your party:\n\n${detailedLines.join('\n\n')}\n\nIf you need to change anything, reply to this email or visit the RSVP page.`;
+
+        // Build an HTML table with full details
+        const rowsHtml = updatedGuests.map(g => {
+          const fullName = `${(g.first_name || g.firstName || '').toString()} ${(g.last_name || g.lastName || '').toString()}`.trim() || 'Unnamed Guest';
+          const emailAddr = g.email || 'N/A';
+          const attending = g.attending ? 'Yes' : 'No';
+          const meal = (g.meal_choice || g.mealChoice) || 'N/A';
+          const dietary = (g.dietary_restrictions || g.dietaryRestrictions) || 'None';
+          const song = (g.song_request || g.songRequest) || 'None';
+          const additional = (g.additional_guests ?? g.additionalGuests ?? 0) || 0;
+
+          return `<tr>
+                    <td style="padding:8px;border:1px solid #ddd">${escapeHtml(fullName)}</td>
+                    <td style="padding:8px;border:1px solid #ddd">${escapeHtml(emailAddr)}</td>
+                    <td style="padding:8px;border:1px solid #ddd">${attending}</td>
+                    <td style="padding:8px;border:1px solid #ddd">${escapeHtml(meal)}</td>
+                    <td style="padding:8px;border:1px solid #ddd">${escapeHtml(dietary)}</td>
+                    <td style="padding:8px;border:1px solid #ddd">${escapeHtml(song)}</td>
+                    <td style="padding:8px;border:1px solid #ddd">${additional}</td>
+                  </tr>`;
+        }).join('');
+
+        const html = `
+          <p>Hi ${escapeHtml(primaryGuest.name || '')},</p>
+          <p>Thanks for RSVPing. Below are the selections for each guest in your party:</p>
+          <table style="border-collapse:collapse;border:1px solid #ddd;">\n            <thead>\n              <tr>\n                <th style="padding:8px;border:1px solid #ddd;text-align:left">Name</th>\n                <th style="padding:8px;border:1px solid #ddd;text-align:left">Email</th>\n                <th style="padding:8px;border:1px solid #ddd;text-align:left">Attending</th>\n                <th style="padding:8px;border:1px solid #ddd;text-align:left">Meal choice</th>\n                <th style="padding:8px;border:1px solid #ddd;text-align:left">Dietary</th>\n                <th style="padding:8px;border:1px solid #ddd;text-align:left">Song request</th>\n                <th style="padding:8px;border:1px solid #ddd;text-align:left">Additional guests</th>\n              </tr>\n            </thead>\n            <tbody>${rowsHtml}</tbody>\n          </table>\n          <p>If you need to change anything, reply to this email or visit the RSVP page.</p>`;
+
+        await sendEmail(to, subject, text, html);
+        emailResult = { emailSent: true };
+      } catch (emailErr) {
+        console.error('Error sending RSVP confirmation email:', emailErr);
+        emailResult = { emailSent: false, emailError: String(emailErr) };
       }
     }
 
     client.release();
-    res.json({ message: 'RSVPs processed', results });
+    res.json({ message: 'RSVPs processed', results, emailResult });
   } catch (err) {
     console.error('Error submitting RSVPs: ', err);
     res.status(500).send('Internal Server Error');
@@ -288,3 +364,14 @@ app.post('/api/party', async (req, res) => {
     res.status(500).send('Internal Server Error');
   }
 });
+
+// Helper: simple HTML escape to avoid breaking the email
+function escapeHtml(str: any) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
