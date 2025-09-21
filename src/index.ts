@@ -293,10 +293,8 @@ app.post('/api/submit-rsvp', async (req, res) => {
           const attending = g.attending ? 'Yes' : 'No';
           const meal = (g.meal_choice || g.mealChoice) || 'N/A';
           const dietary = (g.dietary_restrictions || g.dietaryRestrictions) || 'None';
-          const song = (g.song_request || g.songRequest) || 'None';
-          const additional = (g.additional_guests ?? g.additionalGuests ?? 0) || 0;
 
-          return `Name: ${fullName}\nEmail: ${emailAddr}\nAttending: ${attending}\nMeal choice: ${meal}\nDietary restrictions: ${dietary}\nSong request: ${song}\nAdditional guests: ${additional}`;
+          return `Name: ${fullName}\nEmail: ${emailAddr}\nAttending: ${attending}\nMeal choice: ${meal}\nDietary restrictions: ${dietary}`;
         });
 
         const text = `Hi ${primaryGuest.name || ''},\n\nThanks for RSVPing. Below are the selections for each guest in your party:\n\n${detailedLines.join('\n\n')}\n\nIf you need to change anything, reply to this email or visit the RSVP page.`;
@@ -308,8 +306,6 @@ app.post('/api/submit-rsvp', async (req, res) => {
           const attending = g.attending ? 'Yes' : 'No';
           const meal = (g.meal_choice || g.mealChoice) || 'N/A';
           const dietary = (g.dietary_restrictions || g.dietaryRestrictions) || 'None';
-          const song = (g.song_request || g.songRequest) || 'None';
-          const additional = (g.additional_guests ?? g.additionalGuests ?? 0) || 0;
 
           return `<tr>
                     <td style="padding:8px;border:1px solid #ddd">${escapeHtml(fullName)}</td>
@@ -317,15 +313,25 @@ app.post('/api/submit-rsvp', async (req, res) => {
                     <td style="padding:8px;border:1px solid #ddd">${attending}</td>
                     <td style="padding:8px;border:1px solid #ddd">${escapeHtml(meal)}</td>
                     <td style="padding:8px;border:1px solid #ddd">${escapeHtml(dietary)}</td>
-                    <td style="padding:8px;border:1px solid #ddd">${escapeHtml(song)}</td>
-                    <td style="padding:8px;border:1px solid #ddd">${additional}</td>
                   </tr>`;
         }).join('');
 
         const html = `
           <p>Hi ${escapeHtml(primaryGuest.name || '')},</p>
           <p>Thanks for RSVPing. Below are the selections for each guest in your party:</p>
-          <table style="border-collapse:collapse;border:1px solid #ddd;">\n            <thead>\n              <tr>\n                <th style="padding:8px;border:1px solid #ddd;text-align:left">Name</th>\n                <th style="padding:8px;border:1px solid #ddd;text-align:left">Email</th>\n                <th style="padding:8px;border:1px solid #ddd;text-align:left">Attending</th>\n                <th style="padding:8px;border:1px solid #ddd;text-align:left">Meal choice</th>\n                <th style="padding:8px;border:1px solid #ddd;text-align:left">Dietary</th>\n                <th style="padding:8px;border:1px solid #ddd;text-align:left">Song request</th>\n                <th style="padding:8px;border:1px solid #ddd;text-align:left">Additional guests</th>\n              </tr>\n            </thead>\n            <tbody>${rowsHtml}</tbody>\n          </table>\n          <p>If you need to change anything, reply to this email or visit the RSVP page.</p>`;
+          <table style="border-collapse:collapse;border:1px solid #ddd;">
+            <thead>
+              <tr>
+                <th style="padding:8px;border:1px solid #ddd;text-align:left">Name</th>
+                <th style="padding:8px;border:1px solid #ddd;text-align:left">Email</th>
+                <th style="padding:8px;border:1px solid #ddd;text-align:left">Attending</th>
+                <th style="padding:8px;border:1px solid #ddd;text-align:left">Meal choice</th>
+                <th style="padding:8px;border:1px solid #ddd;text-align:left">Dietary</th>
+              </tr>
+            </thead>
+            <tbody>${rowsHtml}</tbody>
+          </table>
+          <p>If you need to change anything, reply to this email or visit the RSVP page.</p>`;
 
         await sendEmail(to, subject, text, html);
         emailResult = { emailSent: true };
