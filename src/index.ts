@@ -303,7 +303,7 @@ app.post('/api/submit-rsvp', async (req, res) => {
         const rowsHtml = updatedGuests.map(g => {
           const fullName = `${(g.first_name || g.firstName || '').toString()} ${(g.last_name || g.lastName || '').toString()}`.trim() || 'Unnamed Guest';
           const emailAddr = g.email || 'N/A';
-          const attending = g.attending ? 'Yes' : 'No';
+          const attending = g.is_attending ? 'Yes' : 'No';
           const meal = (g.meal_choice || g.mealChoice) || 'N/A';
           const dietary = (g.dietary_restrictions || g.dietaryRestrictions) || 'None';
 
@@ -326,7 +326,7 @@ app.post('/api/submit-rsvp', async (req, res) => {
                 <th style="padding:8px;border:1px solid #ddd;text-align:left">Email</th>
                 <th style="padding:8px;border:1px solid #ddd;text-align:left">Attending</th>
                 <th style="padding:8px;border:1px solid #ddd;text-align:left">Meal choice</th>
-                <th style="padding:8px;border:1px solid #ddd;text-align:left">Dietary</th>
+                <th style="padding:8px;border:1px solid #ddd;text-align:left">Dietary restrictions</th>
               </tr>
             </thead>
             <tbody>${rowsHtml}</tbody>
