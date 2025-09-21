@@ -331,7 +331,7 @@ app.post('/api/submit-rsvp', async (req, res) => {
             </thead>
             <tbody>${rowsHtml}</tbody>
           </table>
-          <p>If you need to change anything, reply to this email or visit the RSVP page.</p>`;
+          <p>If you need to change anything, visit the RSVP page or contact us.</p>`;
 
         await sendEmail(to, subject, text, html);
         emailResult = { emailSent: true };
