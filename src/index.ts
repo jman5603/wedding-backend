@@ -4,7 +4,7 @@ import jwt from 'jsonwebtoken';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import pg from 'pg';
-import { sendRsvpConfirmation, sendEmail } from './email';
+import { sendEmail } from './email';
 
 dotenv.config();
 
@@ -380,3 +380,18 @@ function escapeHtml(str: any) {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 }
+
+app.post('/api/send-guest-message', async (req, res) => {
+  const { recipient, subject, messageBody, html } = req.body;
+  if (!recipient || !subject || !messageBody) {
+    return res.status(400).json({ message: 'recipient, subject, and messageBody are required' });
+  }
+
+  try {
+    await sendEmail(recipient, subject, messageBody, html);
+    res.json({ message: 'Guest message sent successfully' });
+  } catch (err) {
+    console.error('Error sending guest message:', err);
+    res.status(500).json({ message: 'Failed to send guest message' });
+  }
+});
